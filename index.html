@@ -343,6 +343,7 @@
               <option value="Pacing anxiously">Pacing anxiously</option>
               <option value="Immediately after exercise">Just after running / playing</option>
               <option value="Sitting upright">Sitting upright</option>
+              <option value="Unknown">Unknown</option>
             </select>
           </div>
         </div>
@@ -502,13 +503,12 @@
         "Location", "Posture", "Severity", 
         "Symptoms", "Diet", "Time Since Food", 
         "Diet Notes", "Medication", "Duration", 
-        "Vet Notes", "Logged At"
+        "Vet Notes", "Last Updated"
       ]);
       sheet.getRange(1, 1, 1, 15).setFontWeight("bold");
     }
     
-    // Append incident row
-    sheet.appendRow([
+    var rowValues = [
       data.id || "",
       data.date || "",
       data.time || "",
@@ -524,10 +524,31 @@
       data.duration || "",
       data.notes || "",
       new Date().toISOString()
-    ]);
+    ];
+
+    // Search for existing row by Incident ID (Column 1 / A)
+    var targetRow = -1;
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1 && data.id) {
+      var idColumnValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (var i = 0; i < idColumnValues.length; i++) {
+        if (String(idColumnValues[i][0]).trim() === String(data.id).trim()) {
+          targetRow = i + 2; // +2 for 1-based index and skipping header row
+          break;
+        }
+      }
+    }
+
+    if (targetRow > 0) {
+      // Overwrite existing row
+      sheet.getRange(targetRow, 1, 1, rowValues.length).setValues([rowValues]);
+    } else {
+      // Append as new incident
+      sheet.appendRow(rowValues);
+    }
     
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "success" }))
+      .createTextOutput(JSON.stringify({ status: "success", action: targetRow > 0 ? "updated" : "created" }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService

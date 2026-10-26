@@ -44,6 +44,10 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <button id="btnFetchFromSheets" title="Reload entries from Google Sheet" class="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition shadow-sm active:scale-95">
+          <i class="fa-solid fa-arrows-rotate text-emerald-600" id="refreshIcon"></i>
+          <span class="hidden md:inline">Refresh Data</span>
+        </button>
         <button id="btnOpenSheetsConfig" class="inline-flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition shadow-sm active:scale-95">
           <i class="fa-solid fa-table text-emerald-600"></i>
           <span class="hidden sm:inline">Google Sheet Sync</span>
@@ -60,11 +64,19 @@
   <!-- Main Container -->
   <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
 
+    <!-- Loading overlay banner -->
+    <div id="loadingBanner" class="hidden p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs sm:text-sm flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <i class="fa-solid fa-circle-notch fa-spin text-blue-600 text-base"></i>
+        <span>Fetching records from your Google Sheet...</span>
+      </div>
+    </div>
+
     <!-- Sync status banner if not configured -->
     <div id="sheetsNoticeBanner" class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-amber-800 text-xs sm:text-sm">
       <i class="fa-solid fa-circle-info mt-0.5 text-amber-600 text-base"></i>
       <div class="flex-1">
-        <span class="font-semibold">Connect to Google Sheets:</span> Incidents are currently cached safely in your active session. Link your Google Sheet Webhook URL to have every entry write directly into your veterinarian's spreadsheet row by row!
+        <span class="font-semibold">Connect your Google Sheet:</span> Add your Google Apps Script Web App URL below so the app can automatically fetch and display all existing rows and sync new logs directly.
       </div>
       <button onclick="document.getElementById('btnOpenSheetsConfig').click()" class="text-xs underline font-bold hover:text-amber-950 whitespace-nowrap">Configure</button>
     </div>
@@ -486,12 +498,73 @@
       </div>
 
       <div class="text-xs text-slate-600 space-y-2">
-        <p>This allows your logs to instantly post to a live Google Sheet. Whenever you click <em>Save Incident</em>, your dog's episode is securely piped into your sheet.</p>
-        <p class="font-medium text-slate-700">Apps Script Code Template:</p>
+        <p>This script allows your app to both <strong>read all rows</strong> on page load and <strong>save/update</strong> incident entries.</p>
+        <p class="font-medium text-slate-700">Apps Script Code Template (supports doGet and doPost):</p>
       </div>
 
       <div class="relative bg-slate-900 text-slate-200 text-xs p-3 rounded-xl font-mono overflow-x-auto max-h-48 custom-scrollbar">
-        <pre id="appsScriptCode">function doPost(e) {
+        <pre id="appsScriptCode">function doGet(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var lastRow = sheet.getLastRow();
+    var incidents = [];
+
+    if (lastRow > 1) {
+      var values = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
+      for (var i = 0; i < values.length; i++) {
+        var row = values[i];
+        if (!row[0] && !row[1]) continue;
+        
+        var dateVal = row[1];
+        if (dateVal instanceof Date) {
+          dateVal = Utilities.formatDate(dateVal, Session.getScriptTimeZone(), "yyyy-MM-dd");
+        }
+
+        var timeVal = row[2];
+        if (timeVal instanceof Date) {
+          timeVal = Utilities.formatDate(timeVal, Session.getScriptTimeZone(), "HH:mm");
+        }
+
+        incidents.push({
+          id: String(row[0] || ""),
+          date: String(dateVal || ""),
+          time: String(timeVal || ""),
+          timePeriod: String(row[3] || ""),
+          location: String(row[4] || ""),
+          posture: String(row[5] || ""),
+          severity: String(row[6] || "Mild"),
+          symptoms: row[7] ? String(row[7]).split(",").map(function(s){ return s.trim(); }).filter(Boolean) : [],
+          diet: String(row[8] || ""),
+          timeSinceFood: String(row[9] || ""),
+          dietNotes: String(row[10] || ""),
+          medication: String(row[11] || ""),
+          duration: String(row[12] || ""),
+          notes: String(row[13] || ""),
+          lastUpdated: String(row[14] || ""),
+          syncedToSheets: true
+        });
+      }
+    }
+
+    var output = JSON.stringify({ status: "success", incidents: incidents });
+    if (e && e.parameter && e.parameter.callback) {
+      return ContentService.createTextOutput(e.parameter.callback + "(" + output + ")")
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(output)
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    var errOutput = JSON.stringify({ status: "error", message: err.toString() });
+    if (e && e.parameter && e.parameter.callback) {
+      return ContentService.createTextOutput(e.parameter.callback + "(" + errOutput + ")")
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(errOutput)
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doPost(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     var data = JSON.parse(e.postData.contents);
@@ -526,24 +599,22 @@
       new Date().toISOString()
     ];
 
-    // Search for existing row by Incident ID (Column 1 / A)
+    // Search for existing row by Incident ID (Column 1)
     var targetRow = -1;
     var lastRow = sheet.getLastRow();
     if (lastRow > 1 && data.id) {
       var idColumnValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
       for (var i = 0; i < idColumnValues.length; i++) {
         if (String(idColumnValues[i][0]).trim() === String(data.id).trim()) {
-          targetRow = i + 2; // +2 for 1-based index and skipping header row
+          targetRow = i + 2;
           break;
         }
       }
     }
 
     if (targetRow > 0) {
-      // Overwrite existing row
       sheet.getRange(targetRow, 1, 1, rowValues.length).setValues([rowValues]);
     } else {
-      // Append as new incident
       sheet.appendRow(rowValues);
     }
     
@@ -581,61 +652,6 @@
     let googleSheetWebhookUrl = "";
     let timeChartInstance = null;
     let severityChartInstance = null;
-
-    // Standard initial sample data to help user immediately see the UI and vet analytics
-    const initialSampleData = [
-      {
-        id: "sample-1",
-        date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0],
-        time: "05:45",
-        timePeriod: "Early Morning",
-        location: "Dog Bed / Sleeping area",
-        posture: "Lying down (rest/sleep)",
-        severity: "Moderate",
-        symptoms: ["Lip smacking / Licking", "Yellow bile foam", "Licking carpet/floors frantic"],
-        diet: "Regular kibble + 1 spoon pumpkin",
-        timeSinceFood: "6-8+ hours (Empty stomach / Overnight)",
-        dietNotes: "Last fed 6:00 PM previous evening (over 11 hours)",
-        medication: "Offered 1 small ginger treat",
-        duration: "15 mins",
-        notes: "Woke up swallowing hard, regurgitated small drop of yellow liquid.",
-        syncedToSheets: true
-      },
-      {
-        id: "sample-2",
-        date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
-        time: "20:30",
-        timePeriod: "Evening",
-        location: "Living Room Carpet",
-        posture: "Standing with neck stretched",
-        severity: "Mild",
-        symptoms: ["Hard gulping / swallowing", "Burping / Gurgling stomach"],
-        diet: "Beef and rice wet food topper",
-        timeSinceFood: "1-2 hours after meal",
-        dietNotes: "High fat treat given around 7pm",
-        medication: "None",
-        duration: "5 mins",
-        notes: "Audible stomach rumbling, paced for a few minutes then rested.",
-        syncedToSheets: true
-      },
-      {
-        id: "sample-3",
-        date: new Date(Date.now() - 86400000 * 1).toISOString().split('T')[0],
-        time: "06:15",
-        timePeriod: "Early Morning",
-        location: "Backyard / Grass",
-        posture: "Standing with neck stretched",
-        severity: "Severe",
-        symptoms: ["Grass eating", "Yellow bile foam", "Lip smacking / Licking", "Hard gulping / swallowing"],
-        diet: "Standard kibble",
-        timeSinceFood: "6-8+ hours (Empty stomach / Overnight)",
-        dietNotes: "Dinner was early at 5:30 PM",
-        medication: "Famotidine prescribed dose",
-        duration: "25 mins",
-        notes: "Frantically asked to go out, ate grass vigorously then retched clear/yellow foam.",
-        syncedToSheets: false
-      }
-    ];
 
     // Helper: Toast notifications
     function showToast(message, type = "info") {
@@ -684,7 +700,6 @@
         return false;
       }
       try {
-        // Apps Script doPost requires CORS mode no-cors or JSON redirect handling
         await fetch(googleSheetWebhookUrl, {
           method: "POST",
           mode: "no-cors",
@@ -698,6 +713,64 @@
         console.error("Sheets sync error:", err);
         return false;
       }
+    }
+
+    // Fetch live rows from Google Sheet using JSONP fallback for full browser/CORS compatibility
+    function fetchIncidentsFromGoogleSheet() {
+      if (!googleSheetWebhookUrl || !googleSheetWebhookUrl.startsWith("http")) {
+        renderIncidentList();
+        return;
+      }
+
+      const banner = document.getElementById("loadingBanner");
+      const refreshIcon = document.getElementById("refreshIcon");
+      if (banner) banner.classList.remove("hidden");
+      if (refreshIcon) refreshIcon.classList.add("fa-spin");
+
+      const callbackName = "handleSheetData_" + Math.floor(Math.random() * 1000000);
+      let timeoutHandle = null;
+
+      const cleanup = () => {
+        if (banner) banner.classList.add("hidden");
+        if (refreshIcon) refreshIcon.classList.remove("fa-spin");
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        delete window[callbackName];
+        const scriptEl = document.getElementById(callbackName);
+        if (scriptEl) scriptEl.remove();
+      };
+
+      // Set 12s timeout fallback
+      timeoutHandle = setTimeout(() => {
+        cleanup();
+        showToast("Could not reach Google Sheet. Check URL or deploy settings.", "error");
+        renderIncidentList();
+      }, 12000);
+
+      window[callbackName] = function(response) {
+        cleanup();
+        if (response && response.status === "success" && Array.isArray(response.incidents)) {
+          incidents = response.incidents;
+          renderIncidentList();
+          showToast(`Loaded ${incidents.length} record${incidents.length === 1 ? '' : 's'} from Google Sheet`, "success");
+        } else {
+          showToast("Loaded, but received invalid format from Sheet.", "error");
+          renderIncidentList();
+        }
+      };
+
+      // Build JSONP request script
+      const delimiter = googleSheetWebhookUrl.includes("?") ? "&" : "?";
+      const urlWithCallback = `${googleSheetWebhookUrl}${delimiter}callback=${callbackName}&t=${Date.now()}`;
+
+      const script = document.createElement("script");
+      script.id = callbackName;
+      script.src = urlWithCallback;
+      script.onerror = function() {
+        cleanup();
+        showToast("Network error connecting to Google Sheet Web App", "error");
+        renderIncidentList();
+      };
+      document.body.appendChild(script);
     }
 
     // --- UI Update & Rendering ---
@@ -739,7 +812,7 @@
         document.getElementById("sheetsNoticeBanner").classList.add("hidden");
       } else {
         syncBadge.className = "w-2 h-2 rounded-full bg-slate-300";
-        kpiSyncStatus.innerHTML = '<span class="text-slate-500">Local Only</span>';
+        kpiSyncStatus.innerHTML = '<span class="text-slate-500">Not Connected</span>';
         document.getElementById("sheetsNoticeBanner").classList.remove("hidden");
       }
     }
@@ -755,12 +828,14 @@
       const filtered = incidents.filter(inc => {
         if (severityFilter && inc.severity !== severityFilter) return false;
         if (!query) return true;
-        const haystack = `${inc.date} ${inc.time} ${inc.timePeriod} ${inc.location} ${inc.diet} ${inc.dietNotes} ${inc.symptoms.join(" ")} ${inc.notes} ${inc.medication}`.toLowerCase();
+        const haystack = `${inc.date} ${inc.time} ${inc.timePeriod} ${inc.location} ${inc.diet} ${inc.dietNotes} ${(inc.symptoms || []).join(" ")} ${inc.notes} ${inc.medication}`.toLowerCase();
         return haystack.includes(query);
       });
 
       if (filtered.length === 0) {
         emptyState.classList.remove("hidden");
+        updateKPIs();
+        updateVetSummary();
         return;
       }
       emptyState.classList.add("hidden");
@@ -787,7 +862,7 @@
 
         // Sheets sync status icon
         const syncStatusHtml = inc.syncedToSheets ?
-          `<span title="Pushed to Google Sheet" class="text-emerald-600 text-xs flex items-center gap-1"><i class="fa-solid fa-cloud-check"></i> Sheet Synced</span>` :
+          `<span title="Saved in Google Sheet" class="text-emerald-600 text-xs flex items-center gap-1"><i class="fa-solid fa-cloud-check"></i> Sheet Synced</span>` :
           `<button onclick="pushSingleIncidentToSheet('${inc.id}')" title="Click to send to Sheet now" class="text-slate-400 hover:text-emerald-600 text-xs flex items-center gap-1 transition"><i class="fa-solid fa-cloud-arrow-up"></i> Upload</button>`;
 
         card.innerHTML = `
@@ -798,8 +873,8 @@
               </span>
               <div>
                 <h4 class="font-bold text-slate-900 text-sm sm:text-base">
-                  ${inc.date} <span class="text-slate-400 font-normal">at</span> ${inc.time}
-                  <span class="text-xs text-orange-700 bg-orange-50 font-semibold px-2 py-0.5 rounded ml-1.5">${inc.timePeriod || ''}</span>
+                  ${inc.date || 'No Date'} <span class="text-slate-400 font-normal">at</span> ${inc.time || '--:--'}
+                  ${inc.timePeriod ? `<span class="text-xs text-orange-700 bg-orange-50 font-semibold px-2 py-0.5 rounded ml-1.5">${inc.timePeriod}</span>` : ''}
                 </h4>
               </div>
             </div>
@@ -825,7 +900,7 @@
             </div>
             <div>
               <span class="font-semibold text-slate-700 block"><i class="fa-solid fa-dog text-orange-500 mr-1"></i> Dog's Posture:</span>
-              <span class="truncate block">${inc.posture || 'Normal'}</span>
+              <span class="truncate block">${inc.posture || 'Not specified'}</span>
             </div>
           </div>
 
@@ -1187,6 +1262,8 @@
       } catch(e) {}
       updateKPIs();
       showToast("Google Sheet Webhook URL saved!", "success");
+      // Fetch latest rows using newly configured URL
+      fetchIncidentsFromGoogleSheet();
     }
 
     // --- Tab Switching ---
@@ -1224,8 +1301,8 @@
 
     // --- Event Listeners Setup ---
     window.addEventListener("DOMContentLoaded", function() {
-      // Load sample data
-      incidents = [...initialSampleData];
+      // Start with empty incidents list (no static samples)
+      incidents = [];
 
       // Restore session webhook if present
       try {
@@ -1238,8 +1315,22 @@
         }
       } catch(e) {}
 
-      // UI Init
+      // Initial render & pull live data from Google Sheet
       renderIncidentList();
+      fetchIncidentsFromGoogleSheet();
+
+      // Manual refresh button
+      const btnFetch = document.getElementById("btnFetchFromSheets");
+      if (btnFetch) {
+        btnFetch.addEventListener("click", () => {
+          if (!googleSheetWebhookUrl) {
+            showToast("Connect your Google Sheet first!", "error");
+            openSheetsModal();
+            return;
+          }
+          fetchIncidentsFromGoogleSheet();
+        });
+      }
 
       // Navigation
       tabBtnLog.addEventListener("click", () => setActiveTab("log"));

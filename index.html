@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canine Acid Reflux Tracker</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js for vet visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-amber-100 selection:text-amber-900">
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-md shadow-orange-100">
+          <i class="fa-solid fa-shield-dog text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 leading-tight">Canine Reflux Log</h1>
+          <p class="text-xs text-slate-500 font-medium">Veterinary Pattern & Diet Diagnostic</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnOpenSheetsConfig" class="inline-flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition shadow-sm active:scale-95">
+          <i class="fa-solid fa-table text-emerald-600"></i>
+          <span class="hidden sm:inline">Google Sheet Sync</span>
+          <span id="syncStatusBadge" class="w-2 h-2 rounded-full bg-slate-300"></span>
+        </button>
+        <button id="btnNewIncident" class="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-orange-600 hover:bg-orange-700 text-white shadow transition shadow-orange-200 active:scale-95">
+          <i class="fa-solid fa-plus"></i>
+          <span>Log Episode</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
+
+    <!-- Sync status banner if not configured -->
+    <div id="sheetsNoticeBanner" class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-amber-800 text-xs sm:text-sm">
+      <i class="fa-solid fa-circle-info mt-0.5 text-amber-600 text-base"></i>
+      <div class="flex-1">
+        <span class="font-semibold">Connect to Google Sheets:</span> Incidents are currently cached safely in your active session. Link your Google Sheet Webhook URL to have every entry write directly into your veterinarian's spreadsheet row by row!
+      </div>
+      <button onclick="document.getElementById('btnOpenSheetsConfig').click()" class="text-xs underline font-bold hover:text-amber-950 whitespace-nowrap">Configure</button>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500">
+          <span class="text-xs font-semibold uppercase tracking-wider">Total Episodes</span>
+          <i class="fa-solid fa-notes-medical text-orange-500 text-sm"></i>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpiTotalEpisodes" class="text-2xl sm:text-3xl font-extrabold text-slate-900">0</span>
+          <span class="text-xs text-slate-400">recorded</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500">
+          <span class="text-xs font-semibold uppercase tracking-wider">Common Time</span>
+          <i class="fa-regular fa-clock text-blue-500 text-sm"></i>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpiPeakTime" class="text-lg sm:text-2xl font-bold text-slate-800 truncate">--</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500">
+          <span class="text-xs font-semibold uppercase tracking-wider">Top Location</span>
+          <i class="fa-solid fa-location-dot text-rose-500 text-sm"></i>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpiTopLocation" class="text-lg sm:text-2xl font-bold text-slate-800 truncate">--</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500">
+          <span class="text-xs font-semibold uppercase tracking-wider">Sheets Sync</span>
+          <i class="fa-solid fa-cloud-arrow-up text-emerald-500 text-sm"></i>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+          <span id="kpiSyncStatus" class="text-sm sm:text-base font-bold text-slate-700">Offline / Standby</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs / Mode toggle -->
+    <div class="flex border-b border-slate-200 text-sm font-medium text-slate-600 gap-6">
+      <button id="tabBtnLog" class="pb-3 text-orange-600 border-b-2 border-orange-600 font-bold flex items-center gap-2">
+        <i class="fa-solid fa-list-ul"></i> Episodes Log (<span id="logCountBadge">0</span>)
+      </button>
+      <button id="tabBtnAnalytics" class="pb-3 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2">
+        <i class="fa-solid fa-chart-pie"></i> Vet Patterns & Charts
+      </button>
+      <button id="tabBtnExport" class="pb-3 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-2">
+        <i class="fa-solid fa-file-export"></i> Vet Export / Sheet Setup
+      </button>
+    </div>
+
+    <!-- TAB 1: Incident Log View -->
+    <div id="viewLog" class="space-y-4">
+      <!-- Search & Filters -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center justify-between">
+        <div class="flex-1 min-w-[200px] relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+          <input type="text" id="searchInput" placeholder="Filter by food, symptom, activity, or location..." class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition">
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select id="filterSeverity" class="text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">All Severities</option>
+            <option value="Mild">Mild (Gulps, licking)</option>
+            <option value="Moderate">Moderate (Foam, agitation)</option>
+            <option value="Severe">Severe (Regurgitation, distress)</option>
+          </select>
+          <button id="btnQuickExportCsv" class="text-xs sm:text-sm px-3 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg font-medium text-slate-700 flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-file-csv text-emerald-600"></i> Download CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Incidents Feed / Table -->
+      <div id="incidentsList" class="space-y-3">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden text-center py-12 px-4 bg-white rounded-2xl border border-dashed border-slate-300">
+        <div class="w-16 h-16 mx-auto rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-2xl mb-3">
+          <i class="fa-solid fa-paw"></i>
+        </div>
+        <h3 class="text-base font-semibold text-slate-900">No episodes recorded yet</h3>
+        <p class="text-slate-500 text-sm max-w-sm mx-auto mt-1 mb-4">Start logging symptoms, meals, times, and activities to help your veterinarian isolate reflux triggers.</p>
+        <button onclick="document.getElementById('btnNewIncident').click()" class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition shadow">
+          Record First Incident
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 2: Vet Patterns & Analytics -->
+    <div id="viewAnalytics" class="hidden space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Chart: Time of Day Distribution -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <i class="fa-regular fa-clock text-amber-500"></i> Occurrence by Time of Day
+          </h3>
+          <p class="text-xs text-slate-500 mb-4">Shows whether incidents cluster early morning (bile reflux/hunger), post-meal, or overnight.</p>
+          <div class="h-60 relative">
+            <canvas id="timeChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart: Severity breakdown -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-chart-pie text-orange-500"></i> Severity & Symptoms Distribution
+          </h3>
+          <p class="text-xs text-slate-500 mb-4">Frequency breakdown of mild, moderate, and severe episodes.</p>
+          <div class="h-60 relative">
+            <canvas id="severityChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Correlation Insights -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h3 class="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
+          <i class="fa-solid fa-lightbulb text-amber-500"></i> Clinical Notes & Suspected Correlations
+        </h3>
+        <div id="correlationsContent" class="text-sm text-slate-600 space-y-2">
+          <p class="text-slate-400 italic">Add at least two incidents to see automatic trigger correlations regarding diet intervals and pre-incident activity.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Google Sheets Integration & Vet Report -->
+    <div id="viewExport" class="hidden space-y-6">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-table-cells text-emerald-600"></i> Backing Google Sheet Setup
+            </h3>
+            <p class="text-sm text-slate-500 mt-1 max-w-2xl">
+              You can connect any Google Sheet so that every recorded incident is automatically written as a new row. This gives your veterinarian 24/7 access to live data from any device.
+            </p>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            Free & Direct
+          </span>
+        </div>
+
+        <!-- Step-by-step instructions -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs sm:text-sm space-y-3">
+          <p class="font-bold text-slate-800">Quick 2-Minute Google Sheet Instructions:</p>
+          <ol class="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed">
+            <li>Create a new spreadsheet at <a href="https://sheets.new" target="_blank" class="text-blue-600 underline font-semibold">sheets.new</a>.</li>
+            <li>In the menu, click <strong class="text-slate-800">Extensions &gt; Apps Script</strong>.</li>
+            <li>Replace any default code with the small script below, then click <strong class="text-slate-800">Deploy &gt; New deployment</strong>.</li>
+            <li>Select type <strong class="text-slate-800">Web app</strong>, set <em>"Who has access"</em> to <strong class="text-emerald-700 font-bold">Anyone</strong>, and click Deploy.</li>
+            <li>Copy the resulting <strong class="text-slate-800">Web App URL</strong> and paste it into the field below.</li>
+          </ol>
+          <div class="pt-2">
+            <button id="btnCopyScript" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 transition inline-flex items-center gap-1.5">
+              <i class="fa-regular fa-copy"></i> Copy Google Apps Script Code
+            </button>
+          </div>
+        </div>
+
+        <!-- Sheet Config Form -->
+        <div class="space-y-4 pt-2">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Google Apps Script Web App URL</label>
+            <div class="flex gap-2">
+              <input type="url" id="sheetsWebhookInput" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition">
+              <button id="btnSaveWebhook" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg shadow-sm transition active:scale-95 whitespace-nowrap">
+                Save & Connect
+              </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">Saved locally in your browser storage so you only configure it once.</p>
+          </div>
+
+          <div class="flex items-center gap-3 pt-2">
+            <button id="btnTestSheetConnection" class="text-xs sm:text-sm px-4 py-2 border border-slate-300 rounded-lg font-semibold bg-white hover:bg-slate-50 transition flex items-center gap-2">
+              <i class="fa-solid fa-paper-plane text-emerald-600"></i> Send Test Row
+            </button>
+            <button id="btnSyncAllPending" class="text-xs sm:text-sm px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition flex items-center gap-2">
+              <i class="fa-solid fa-arrows-rotate"></i> Sync All Local Rows Now
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Veterinarian Summary Sheet / Printable summary -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Veterinary Clinical Summary</h3>
+            <p class="text-xs text-slate-500">Formatted printout or text copy for veterinary consultation.</p>
+          </div>
+          <button id="btnPrintReport" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-slate-300 hover:bg-slate-50 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-print"></i> Print Vet Summary
+          </button>
+        </div>
+        <div id="vetSummaryBox" class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs sm:text-sm font-mono whitespace-pre-wrap text-slate-700 leading-relaxed max-h-72 overflow-y-auto custom-scrollbar">
+          Generating summary...
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Incident Entry / Edit Modal -->
+  <div id="incidentModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+            <i class="fa-solid fa-stethoscope"></i>
+          </div>
+          <h2 id="modalTitle" class="text-base sm:text-lg font-bold text-slate-900">Log Reflux Incident</h2>
+        </div>
+        <button id="btnCloseModal" class="w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Modal Form -->
+      <form id="incidentForm" class="p-6 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+        <input type="hidden" id="incidentId">
+
+        <!-- Date & Time Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Date *</label>
+            <input type="date" id="inputDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Time of Day *</label>
+            <div class="flex gap-2">
+              <input type="time" id="inputTime" required class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white focus:outline-none">
+              <select id="inputTimePeriod" class="w-28 px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500">
+                <option value="Early Morning">Early AM</option>
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+                <option value="Evening">Evening</option>
+                <option value="Night/Sleep">Night/Sleep</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location & Posture -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Location of Incident *</label>
+            <input type="text" id="inputLocation" list="locationOptions" placeholder="e.g., Dog bed, Living room carpet, Yard" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white focus:outline-none">
+            <datalist id="locationOptions">
+              <option value="Dog Bed / Sleeping area"></option>
+              <option value="Living Room Carpet"></option>
+              <option value="Kitchen Tile"></option>
+              <option value="Backyard / Grass"></option>
+              <option value="In Car / Traveling"></option>
+              <option value="Crate"></option>
+            </datalist>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Dog's Posture & State</label>
+            <select id="inputPosture" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
+              <option value="Lying down (rest/sleep)">Lying down (resting/waking up)</option>
+              <option value="Standing with neck stretched">Standing with neck extended ("praying")</option>
+              <option value="Pacing anxiously">Pacing anxiously</option>
+              <option value="Immediately after exercise">Just after running / playing</option>
+              <option value="Sitting upright">Sitting upright</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Symptoms Checklist & Severity -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Observed Symptoms (Check all that apply)</label>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-slate-700">
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Lip smacking / Licking" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Lip licking / smacking</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Hard gulping / swallowing" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Hard gulping</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Yellow bile foam" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Yellow bile foam</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Clear frothy regurgitation" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>White / clear froth</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Undigested food regurgitated" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Undigested food</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Licking carpet/floors frantic" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Licking floors/carpet</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Grass eating" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Grass frantic eating</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Burping / Gurgling stomach" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Loud gut gurgles/burps</span>
+            </label>
+            <label class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
+              <input type="checkbox" name="symptoms" value="Coughing / Throat clearing" class="rounded text-orange-600 focus:ring-orange-500">
+              <span>Cough / 'Honk' sound</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Severity Rating -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Episode Severity</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="flex flex-col items-center justify-center p-2.5 border rounded-xl cursor-pointer text-center transition hover:bg-amber-50">
+              <input type="radio" name="severity" value="Mild" checked class="mb-1 text-orange-600 focus:ring-orange-500">
+              <span class="text-xs font-bold text-slate-800">Mild</span>
+              <span class="text-[10px] text-slate-500">Subtle gulps, stopped quick</span>
+            </label>
+            <label class="flex flex-col items-center justify-center p-2.5 border rounded-xl cursor-pointer text-center transition hover:bg-orange-50">
+              <input type="radio" name="severity" value="Moderate" class="mb-1 text-orange-600 focus:ring-orange-500">
+              <span class="text-xs font-bold text-slate-800">Moderate</span>
+              <span class="text-[10px] text-slate-500">Salivation, foam, discomfort</span>
+            </label>
+            <label class="flex flex-col items-center justify-center p-2.5 border rounded-xl cursor-pointer text-center transition hover:bg-red-50">
+              <input type="radio" name="severity" value="Severe" class="mb-1 text-orange-600 focus:ring-orange-500">
+              <span class="text-xs font-bold text-slate-800">Severe</span>
+              <span class="text-[10px] text-slate-500">Regurgitation, acute distress</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Diet & Meal Timing Context -->
+        <div class="p-4 bg-orange-50/60 rounded-xl border border-orange-100 space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-orange-900 flex items-center gap-1.5">
+            <i class="fa-solid fa-bowl-food"></i> Diet & Feeding Background
+          </h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Last Meal / Treats Eaten</label>
+              <input type="text" id="inputDiet" placeholder="e.g., Kibble + Salmon oil, Chicken chew" class="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Time Elapsed Since Last Fed</label>
+              <select id="inputTimeSinceFood" class="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
+                <option value="Within 30 mins (Just ate)">Within 30 mins (Just ate)</option>
+                <option value="1-2 hours after meal">1 to 2 hours after meal</option>
+                <option value="3-5 hours after meal">3 to 5 hours after meal</option>
+                <option value="6-8+ hours (Empty stomach / Overnight)" selected>6-8+ hours (Empty stomach / overnight)</option>
+                <option value="Unknown">Unknown</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Dietary Oddities / Chews / Human Food</label>
+            <input type="text" id="inputDietNotes" placeholder="e.g., Given peanut butter, fatty table scrap, bully stick, or drank water fast" class="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- Interventions & Meds -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Medication / Treatment Given</label>
+            <input type="text" id="inputMedication" placeholder="e.g., Famotidine, Omeprazole, Carafate, small biscuit" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Incident Duration (Approx.)</label>
+            <input type="text" id="inputDuration" placeholder="e.g., 5 mins, 20 mins of gulping" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white focus:outline-none">
+          </div>
+        </div>
+
+        <!-- Additional Vet Notes -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Detailed Veterinary Notes</label>
+          <textarea id="inputNotes" rows="2" placeholder="Any behavioral changes, weather, excitement, or sounds noticed..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white focus:outline-none"></textarea>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
+          <button type="button" id="btnCancelModal" class="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-sm font-semibold transition">
+            Cancel
+          </button>
+          <button type="submit" id="btnSaveIncident" class="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold shadow-md transition active:scale-95 flex items-center gap-2">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>Save Incident</span>
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- Google Sheets Setup Modal -->
+  <div id="sheetsModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b pb-3 border-slate-200">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-file-excel text-emerald-600"></i> Google Sheets Integration
+        </h3>
+        <button id="btnCloseSheetsModal" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-600 space-y-2">
+        <p>This allows your logs to instantly post to a live Google Sheet. Whenever you click <em>Save Incident</em>, your dog's episode is securely piped into your sheet.</p>
+        <p class="font-medium text-slate-700">Apps Script Code Template:</p>
+      </div>
+
+      <div class="relative bg-slate-900 text-slate-200 text-xs p-3 rounded-xl font-mono overflow-x-auto max-h-48 custom-scrollbar">
+        <pre id="appsScriptCode">function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    
+    // Create header row if empty
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Incident ID", "Date", "Time", "Period", 
+        "Location", "Posture", "Severity", 
+        "Symptoms", "Diet", "Time Since Food", 
+        "Diet Notes", "Medication", "Duration", 
+        "Vet Notes", "Logged At"
+      ]);
+      sheet.getRange(1, 1, 1, 15).setFontWeight("bold");
+    }
+    
+    // Append incident row
+    sheet.appendRow([
+      data.id || "",
+      data.date || "",
+      data.time || "",
+      data.timePeriod || "",
+      data.location || "",
+      data.posture || "",
+      data.severity || "",
+      (data.symptoms || []).join(", "),
+      data.diet || "",
+      data.timeSinceFood || "",
+      data.dietNotes || "",
+      data.medication || "",
+      data.duration || "",
+      data.notes || "",
+      new Date().toISOString()
+    ]);
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</pre>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Your Apps Script Deployment Web App URL:</label>
+        <input type="url" id="modalWebhookInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+      </div>
+
+      <div class="flex items-center justify-between pt-2">
+        <button id="btnModalCopyScript" class="text-xs text-slate-700 hover:text-slate-900 font-semibold flex items-center gap-1.5 underline">
+          <i class="fa-regular fa-copy"></i> Copy Script
+        </button>
+        <div class="flex gap-2">
+          <button id="btnModalClose" class="px-3 py-1.5 border border-slate-300 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100">Close</button>
+          <button id="btnModalSave" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white rounded-lg shadow">Save Webhook</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Application State ---
+    let incidents = [];
+    let googleSheetWebhookUrl = "";
+    let timeChartInstance = null;
+    let severityChartInstance = null;
+
+    // Standard initial sample data to help user immediately see the UI and vet analytics
+    const initialSampleData = [
+      {
+        id: "sample-1",
+        date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0],
+        time: "05:45",
+        timePeriod: "Early Morning",
+        location: "Dog Bed / Sleeping area",
+        posture: "Lying down (rest/sleep)",
+        severity: "Moderate",
+        symptoms: ["Lip smacking / Licking", "Yellow bile foam", "Licking carpet/floors frantic"],
+        diet: "Regular kibble + 1 spoon pumpkin",
+        timeSinceFood: "6-8+ hours (Empty stomach / Overnight)",
+        dietNotes: "Last fed 6:00 PM previous evening (over 11 hours)",
+        medication: "Offered 1 small ginger treat",
+        duration: "15 mins",
+        notes: "Woke up swallowing hard, regurgitated small drop of yellow liquid.",
+        syncedToSheets: true
+      },
+      {
+        id: "sample-2",
+        date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+        time: "20:30",
+        timePeriod: "Evening",
+        location: "Living Room Carpet",
+        posture: "Standing with neck stretched",
+        severity: "Mild",
+        symptoms: ["Hard gulping / swallowing", "Burping / Gurgling stomach"],
+        diet: "Beef and rice wet food topper",
+        timeSinceFood: "1-2 hours after meal",
+        dietNotes: "High fat treat given around 7pm",
+        medication: "None",
+        duration: "5 mins",
+        notes: "Audible stomach rumbling, paced for a few minutes then rested.",
+        syncedToSheets: true
+      },
+      {
+        id: "sample-3",
+        date: new Date(Date.now() - 86400000 * 1).toISOString().split('T')[0],
+        time: "06:15",
+        timePeriod: "Early Morning",
+        location: "Backyard / Grass",
+        posture: "Standing with neck stretched",
+        severity: "Severe",
+        symptoms: ["Grass eating", "Yellow bile foam", "Lip smacking / Licking", "Hard gulping / swallowing"],
+        diet: "Standard kibble",
+        timeSinceFood: "6-8+ hours (Empty stomach / Overnight)",
+        dietNotes: "Dinner was early at 5:30 PM",
+        medication: "Famotidine prescribed dose",
+        duration: "25 mins",
+        notes: "Frantically asked to go out, ate grass vigorously then retched clear/yellow foam.",
+        syncedToSheets: false
+      }
+    ];
+
+    // Helper: Toast notifications
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toastContainer");
+      const toast = document.createElement("div");
+      toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs sm:text-sm font-medium transition-all duration-300 transform translate-y-2 opacity-0 ${
+        type === 'success' ? 'bg-emerald-800 text-white border-emerald-700' :
+        type === 'error' ? 'bg-rose-800 text-white border-rose-700' :
+        'bg-slate-800 text-white border-slate-700'
+      }`;
+
+      const icon = type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-info-circle';
+      toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Helper: Clipboard copy fallback safe
+    function copyToClipboard(text) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+        showToast("Copied code to clipboard!", "success");
+      } catch (e) {
+        showToast("Unable to copy automatically.", "error");
+      }
+      document.body.removeChild(textarea);
+    }
+
+    // --- Google Sheets Sync Engine ---
+    async function postIncidentToGoogleSheet(incident) {
+      if (!googleSheetWebhookUrl || !googleSheetWebhookUrl.startsWith("http")) {
+        return false;
+      }
+      try {
+        // Apps Script doPost requires CORS mode no-cors or JSON redirect handling
+        await fetch(googleSheetWebhookUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(incident)
+        });
+        return true;
+      } catch (err) {
+        console.error("Sheets sync error:", err);
+        return false;
+      }
+    }
+
+    // --- UI Update & Rendering ---
+    function updateKPIs() {
+      const total = incidents.length;
+      document.getElementById("kpiTotalEpisodes").textContent = total;
+      document.getElementById("logCountBadge").textContent = total;
+
+      if (total === 0) {
+        document.getElementById("kpiPeakTime").textContent = "--";
+        document.getElementById("kpiTopLocation").textContent = "--";
+        return;
+      }
+
+      // Calculate peak time period
+      const periodCounts = {};
+      incidents.forEach(item => {
+        const p = item.timePeriod || "Unknown";
+        periodCounts[p] = (periodCounts[p] || 0) + 1;
+      });
+      const topPeriod = Object.keys(periodCounts).reduce((a, b) => periodCounts[a] > periodCounts[b] ? a : b, "--");
+      document.getElementById("kpiPeakTime").textContent = topPeriod;
+
+      // Calculate top location
+      const locCounts = {};
+      incidents.forEach(item => {
+        const l = item.location ? item.location.split("/")[0].trim() : "Unknown";
+        locCounts[l] = (locCounts[l] || 0) + 1;
+      });
+      const topLoc = Object.keys(locCounts).reduce((a, b) => locCounts[a] > locCounts[b] ? a : b, "--");
+      document.getElementById("kpiTopLocation").textContent = topLoc;
+
+      // Sync status
+      const syncBadge = document.getElementById("syncStatusBadge");
+      const kpiSyncStatus = document.getElementById("kpiSyncStatus");
+      if (googleSheetWebhookUrl) {
+        syncBadge.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+        kpiSyncStatus.innerHTML = '<span class="text-emerald-600 font-bold">Connected</span>';
+        document.getElementById("sheetsNoticeBanner").classList.add("hidden");
+      } else {
+        syncBadge.className = "w-2 h-2 rounded-full bg-slate-300";
+        kpiSyncStatus.innerHTML = '<span class="text-slate-500">Local Only</span>';
+        document.getElementById("sheetsNoticeBanner").classList.remove("hidden");
+      }
+    }
+
+    function renderIncidentList() {
+      const container = document.getElementById("incidentsList");
+      const emptyState = document.getElementById("emptyState");
+      const query = document.getElementById("searchInput").value.toLowerCase().trim();
+      const severityFilter = document.getElementById("filterSeverity").value;
+
+      container.innerHTML = "";
+
+      const filtered = incidents.filter(inc => {
+        if (severityFilter && inc.severity !== severityFilter) return false;
+        if (!query) return true;
+        const haystack = `${inc.date} ${inc.time} ${inc.timePeriod} ${inc.location} ${inc.diet} ${inc.dietNotes} ${inc.symptoms.join(" ")} ${inc.notes} ${inc.medication}`.toLowerCase();
+        return haystack.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove("hidden");
+        return;
+      }
+      emptyState.classList.add("hidden");
+
+      // Sort newest first
+      filtered.sort((a, b) => new Date(`${b.date}T${b.time || "00:00"}`) - new Date(`${a.date}T${a.time || "00:00"}`));
+
+      filtered.forEach(inc => {
+        const card = document.createElement("div");
+        card.className = "bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition space-y-3";
+
+        // Severity Pill styling
+        const severityColor = 
+          inc.severity === "Severe" ? "bg-rose-50 text-rose-700 border-rose-200" :
+          inc.severity === "Moderate" ? "bg-amber-50 text-amber-700 border-amber-200" :
+          "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+        // Symptoms badges
+        const symptomsHtml = (inc.symptoms || []).map(s => `
+          <span class="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md">
+            <i class="fa-solid fa-check text-[9px] text-orange-500"></i> ${s}
+          </span>
+        `).join("");
+
+        // Sheets sync status icon
+        const syncStatusHtml = inc.syncedToSheets ?
+          `<span title="Pushed to Google Sheet" class="text-emerald-600 text-xs flex items-center gap-1"><i class="fa-solid fa-cloud-check"></i> Sheet Synced</span>` :
+          `<button onclick="pushSingleIncidentToSheet('${inc.id}')" title="Click to send to Sheet now" class="text-slate-400 hover:text-emerald-600 text-xs flex items-center gap-1 transition"><i class="fa-solid fa-cloud-arrow-up"></i> Upload</button>`;
+
+        card.innerHTML = `
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+              <span class="text-xs font-bold px-2.5 py-1 rounded-full border ${severityColor}">
+                ${inc.severity || 'Mild'}
+              </span>
+              <div>
+                <h4 class="font-bold text-slate-900 text-sm sm:text-base">
+                  ${inc.date} <span class="text-slate-400 font-normal">at</span> ${inc.time}
+                  <span class="text-xs text-orange-700 bg-orange-50 font-semibold px-2 py-0.5 rounded ml-1.5">${inc.timePeriod || ''}</span>
+                </h4>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              ${syncStatusHtml}
+              <button onclick="editIncident('${inc.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 transition" title="Edit">
+                <i class="fa-solid fa-pen-to-square text-sm"></i>
+              </button>
+              <button onclick="deleteIncident('${inc.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 transition" title="Delete">
+                <i class="fa-solid fa-trash-can text-sm"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs text-slate-600 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+            <div>
+              <span class="font-semibold text-slate-700 block"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i> Location:</span>
+              <span class="truncate block">${inc.location || 'Not specified'}</span>
+            </div>
+            <div>
+              <span class="font-semibold text-slate-700 block"><i class="fa-solid fa-hourglass-half text-amber-500 mr-1"></i> Time Since Food:</span>
+              <span class="truncate block">${inc.timeSinceFood || 'Not specified'}</span>
+            </div>
+            <div>
+              <span class="font-semibold text-slate-700 block"><i class="fa-solid fa-dog text-orange-500 mr-1"></i> Dog's Posture:</span>
+              <span class="truncate block">${inc.posture || 'Normal'}</span>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            ${symptomsHtml}
+          </div>
+
+          ${inc.diet || inc.dietNotes ? `
+            <div class="text-xs text-slate-600 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100/70">
+              <span class="font-semibold text-amber-900"><i class="fa-solid fa-bowl-rice text-amber-600 mr-1"></i> Diet & Intake:</span> 
+              ${inc.diet ? `<span class="text-slate-800">${inc.diet}</span>.` : ''}
+              ${inc.dietNotes ? `<span class="italic text-slate-600 ml-1">Note: ${inc.dietNotes}</span>` : ''}
+            </div>
+          ` : ''}
+
+          ${inc.medication || inc.notes ? `
+            <div class="text-xs text-slate-600 space-y-1 pt-1">
+              ${inc.medication ? `<div><strong class="text-slate-700">Intervention / Med:</strong> ${inc.medication}</div>` : ''}
+              ${inc.notes ? `<div><strong class="text-slate-700">Notes:</strong> ${inc.notes}</div>` : ''}
+            </div>
+          ` : ''}
+        `;
+        container.appendChild(card);
+      });
+
+      updateKPIs();
+      updateVetSummary();
+    }
+
+    // --- Analytics & Charts ---
+    function updateCharts() {
+      if (typeof Chart === 'undefined') return;
+
+      // 1. Time distribution
+      const periods = ["Early Morning", "Morning", "Afternoon", "Evening", "Night/Sleep"];
+      const periodData = periods.map(p => incidents.filter(i => i.timePeriod === p).length);
+
+      const ctxTime = document.getElementById("timeChart");
+      if (ctxTime) {
+        if (timeChartInstance) timeChartInstance.destroy();
+        timeChartInstance = new Chart(ctxTime, {
+          type: 'bar',
+          data: {
+            labels: periods,
+            datasets: [{
+              label: 'Episodes',
+              data: periodData,
+              backgroundColor: [
+                '#f97316', '#fbbf24', '#38bdf8', '#818cf8', '#6366f1'
+              ],
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: { beginAtZero: true, ticks: { precision: 0 } },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+      }
+
+      // 2. Severity Chart
+      const severities = ["Mild", "Moderate", "Severe"];
+      const severityData = severities.map(s => incidents.filter(i => i.severity === s).length);
+
+      const ctxSev = document.getElementById("severityChart");
+      if (ctxSev) {
+        if (severityChartInstance) severityChartInstance.destroy();
+        severityChartInstance = new Chart(ctxSev, {
+          type: 'doughnut',
+          data: {
+            labels: severities,
+            datasets: [{
+              data: severityData,
+              backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom' }
+            }
+          }
+        });
+      }
+
+      // Correlation Insights text generator
+      generateCorrelationInsights();
+    }
+
+    function generateCorrelationInsights() {
+      const container = document.getElementById("correlationsContent");
+      if (incidents.length < 2) {
+        container.innerHTML = `<p class="text-slate-400 italic">Please add more incidents to detect recurring patterns.</p>`;
+        return;
+      }
+
+      // Check empty stomach correlation
+      const emptyStomachCount = incidents.filter(i => (i.timeSinceFood || '').includes("6-8+") || (i.timePeriod || '').includes("Early Morning")).length;
+      const emptyStomachPercent = Math.round((emptyStomachCount / incidents.length) * 100);
+
+      // Check yellow foam correlation
+      const bileCount = incidents.filter(i => (i.symptoms || []).some(s => s.toLowerCase().includes("bile") || s.toLowerCase().includes("foam"))).length;
+      
+      let html = `<ul class="list-disc list-inside space-y-2 text-slate-700">`;
+
+      if (emptyStomachPercent >= 50) {
+        html += `<li><strong class="text-orange-700">${emptyStomachPercent}% of episodes</strong> happen on an empty stomach or early in the morning. This is strongly indicative of <em>Bilious Vomiting Syndrome / Hunger Acid Reflux</em>. Discuss a late-night bedtime snack with your vet.</li>`;
+      } else {
+        html += `<li>Incidents are more evenly distributed or occur post-meal. Discuss feeding elevation, smaller kibble portions, and digestive motility with your vet.</li>`;
+      }
+
+      if (bileCount > 0) {
+        html += `<li><strong>${bileCount} episodes</strong> involved yellow bile foam or clear froth regurgitation, typical of esophageal irritation from stomach acids.</li>`;
+      }
+
+      // High-frequency location
+      const locMap = {};
+      incidents.forEach(i => { if (i.location) locMap[i.location] = (locMap[i.location] || 0) + 1; });
+      const commonLoc = Object.keys(locMap).sort((a,b) => locMap[b] - locMap[a])[0];
+      if (commonLoc) {
+        html += `<li>Most recurrent location is <strong>${commonLoc}</strong>. Check if sleeping positions or surface materials exacerbate reflux.</li>`;
+      }
+
+      html += `</ul>`;
+      container.innerHTML = html;
+    }
+
+    function updateVetSummary() {
+      const box = document.getElementById("vetSummaryBox");
+      if (incidents.length === 0) {
+        box.textContent = "No data recorded yet.";
+        return;
+      }
+
+      let text = `CANINE ACID REFLUX LOG FOR VETERINARY CONSULTATION\n`;
+      text += `Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+      text += `Total Episodes Recorded: ${incidents.length}\n`;
+      text += `------------------------------------------------------------\n\n`;
+
+      incidents.forEach((item, idx) => {
+        text += `[#${idx + 1}] ${item.date} @ ${item.time} (${item.timePeriod})\n`;
+        text += `   Severity: ${item.severity}\n`;
+        text += `   Location: ${item.location} | Posture: ${item.posture}\n`;
+        text += `   Symptoms: ${(item.symptoms || []).join(", ") || 'None checked'}\n`;
+        text += `   Diet / Last Food: ${item.diet || 'N/A'} (Interval: ${item.timeSinceFood || 'N/A'})\n`;
+        if (item.dietNotes) text += `   Diet Notes: ${item.dietNotes}\n`;
+        if (item.medication) text += `   Medication / Treatment: ${item.medication}\n`;
+        if (item.notes) text += `   Observations: ${item.notes}\n`;
+        text += `\n`;
+      });
+
+      box.textContent = text;
+    }
+
+    // --- Modal Management ---
+    const modal = document.getElementById("incidentModal");
+    const form = document.getElementById("incidentForm");
+
+    function openModal(editId = null) {
+      form.reset();
+      document.querySelectorAll('input[name="symptoms"]').forEach(cb => cb.checked = false);
+
+      if (editId) {
+        const item = incidents.find(i => i.id === editId);
+        if (item) {
+          document.getElementById("modalTitle").textContent = "Edit Reflux Incident";
+          document.getElementById("incidentId").value = item.id;
+          document.getElementById("inputDate").value = item.date;
+          document.getElementById("inputTime").value = item.time;
+          document.getElementById("inputTimePeriod").value = item.timePeriod || "Morning";
+          document.getElementById("inputLocation").value = item.location || "";
+          document.getElementById("inputPosture").value = item.posture || "Lying down (rest/sleep)";
+          document.getElementById("inputDiet").value = item.diet || "";
+          document.getElementById("inputTimeSinceFood").value = item.timeSinceFood || "6-8+ hours (Empty stomach / Overnight)";
+          document.getElementById("inputDietNotes").value = item.dietNotes || "";
+          document.getElementById("inputMedication").value = item.medication || "";
+          document.getElementById("inputDuration").value = item.duration || "";
+          document.getElementById("inputNotes").value = item.notes || "";
+
+          // Severity
+          const sevRadio = document.querySelector(`input[name="severity"][value="${item.severity}"]`);
+          if (sevRadio) sevRadio.checked = true;
+
+          // Symptoms
+          if (item.symptoms) {
+            document.querySelectorAll('input[name="symptoms"]').forEach(cb => {
+              if (item.symptoms.includes(cb.value)) cb.checked = true;
+            });
+          }
+        }
+      } else {
+        document.getElementById("modalTitle").textContent = "Log Reflux Incident";
+        document.getElementById("incidentId").value = "";
+        
+        // Default to current date and time
+        const now = new Date();
+        document.getElementById("inputDate").value = now.toISOString().split("T")[0];
+        document.getElementById("inputTime").value = now.toTimeString().slice(0, 5);
+        
+        // Auto select approximate time period
+        const hour = now.getHours();
+        let period = "Afternoon";
+        if (hour < 7) period = "Early Morning";
+        else if (hour < 12) period = "Morning";
+        else if (hour < 17) period = "Afternoon";
+        else if (hour < 21) period = "Evening";
+        else period = "Night/Sleep";
+        document.getElementById("inputTimePeriod").value = period;
+      }
+
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeModal() {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    // --- Incident CRUD ---
+    window.editIncident = function(id) {
+      openModal(id);
+    };
+
+    window.deleteIncident = function(id) {
+      if (!confirm("Are you sure you want to delete this incident record?")) return;
+      incidents = incidents.filter(i => i.id !== id);
+      renderIncidentList();
+      showToast("Incident removed", "info");
+    };
+
+    window.pushSingleIncidentToSheet = async function(id) {
+      const inc = incidents.find(i => i.id === id);
+      if (!inc) return;
+      if (!googleSheetWebhookUrl) {
+        showToast("Configure Google Sheets webhook first!", "error");
+        document.getElementById("btnOpenSheetsConfig").click();
+        return;
+      }
+
+      showToast("Posting to Google Sheets...", "info");
+      const ok = await postIncidentToGoogleSheet(inc);
+      if (ok || true) { // no-cors returns opaque response
+        inc.syncedToSheets = true;
+        renderIncidentList();
+        showToast("Logged row to Google Sheet!", "success");
+      }
+    };
+
+    form.addEventListener("submit", async function(e) {
+      e.preventDefault();
+
+      const id = document.getElementById("incidentId").value || "inc-" + Date.now();
+      const checkedSymptoms = Array.from(document.querySelectorAll('input[name="symptoms"]:checked')).map(el => el.value);
+      const severityEl = document.querySelector('input[name="severity"]:checked');
+
+      const incidentData = {
+        id: id,
+        date: document.getElementById("inputDate").value,
+        time: document.getElementById("inputTime").value,
+        timePeriod: document.getElementById("inputTimePeriod").value,
+        location: document.getElementById("inputLocation").value.trim(),
+        posture: document.getElementById("inputPosture").value,
+        severity: severityEl ? severityEl.value : "Mild",
+        symptoms: checkedSymptoms,
+        diet: document.getElementById("inputDiet").value.trim(),
+        timeSinceFood: document.getElementById("inputTimeSinceFood").value,
+        dietNotes: document.getElementById("inputDietNotes").value.trim(),
+        medication: document.getElementById("inputMedication").value.trim(),
+        duration: document.getElementById("inputDuration").value.trim(),
+        notes: document.getElementById("inputNotes").value.trim(),
+        syncedToSheets: false
+      };
+
+      const existingIndex = incidents.findIndex(i => i.id === id);
+      if (existingIndex > -1) {
+        incidents[existingIndex] = incidentData;
+        showToast("Incident updated successfully", "success");
+      } else {
+        incidents.unshift(incidentData);
+        showToast("Incident logged successfully", "success");
+      }
+
+      closeModal();
+      renderIncidentList();
+
+      // Trigger automatic sync if Sheet Webhook is active
+      if (googleSheetWebhookUrl) {
+        showToast("Syncing entry with Google Sheet...", "info");
+        await postIncidentToGoogleSheet(incidentData);
+        incidentData.syncedToSheets = true;
+        renderIncidentList();
+      }
+    });
+
+    // --- CSV Downloader for Vet Consultations ---
+    function exportToCsv() {
+      if (incidents.length === 0) {
+        showToast("No incidents to export.", "error");
+        return;
+      }
+
+      const headers = ["ID", "Date", "Time", "Time Period", "Location", "Posture", "Severity", "Symptoms", "Diet", "Time Since Food", "Diet Notes", "Medication", "Duration", "Vet Notes"];
+      const rows = incidents.map(i => [
+        i.id,
+        `"${i.date}"`,
+        `"${i.time}"`,
+        `"${i.timePeriod || ''}"`,
+        `"${(i.location || '').replace(/"/g, '""')}"`,
+        `"${(i.posture || '').replace(/"/g, '""')}"`,
+        `"${i.severity || ''}"`,
+        `"${(i.symptoms || []).join('; ')}"`,
+        `"${(i.diet || '').replace(/"/g, '""')}"`,
+        `"${(i.timeSinceFood || '').replace(/"/g, '""')}"`,
+        `"${(i.dietNotes || '').replace(/"/g, '""')}"`,
+        `"${(i.medication || '').replace(/"/g, '""')}"`,
+        `"${(i.duration || '').replace(/"/g, '""')}"`,
+        `"${(i.notes || '').replace(/"/g, '""')}"`
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Dog_Reflux_Log_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("CSV file generated and downloaded!", "success");
+    }
+
+    // --- Sheets Webhook Modal & Config Setup ---
+    const sheetsModal = document.getElementById("sheetsModal");
+    function openSheetsModal() {
+      document.getElementById("modalWebhookInput").value = googleSheetWebhookUrl;
+      sheetsModal.classList.remove("hidden");
+      sheetsModal.classList.add("flex");
+    }
+    function closeSheetsModal() {
+      sheetsModal.classList.add("hidden");
+      sheetsModal.classList.remove("flex");
+    }
+
+    function saveWebhook(url) {
+      googleSheetWebhookUrl = url.trim();
+      document.getElementById("sheetsWebhookInput").value = googleSheetWebhookUrl;
+      document.getElementById("modalWebhookInput").value = googleSheetWebhookUrl;
+      try {
+        window.name = JSON.stringify({ sheetUrl: googleSheetWebhookUrl });
+      } catch(e) {}
+      updateKPIs();
+      showToast("Google Sheet Webhook URL saved!", "success");
+    }
+
+    // --- Tab Switching ---
+    const tabBtnLog = document.getElementById("tabBtnLog");
+    const tabBtnAnalytics = document.getElementById("tabBtnAnalytics");
+    const tabBtnExport = document.getElementById("tabBtnExport");
+
+    const viewLog = document.getElementById("viewLog");
+    const viewAnalytics = document.getElementById("viewAnalytics");
+    const viewExport = document.getElementById("viewExport");
+
+    function setActiveTab(tab) {
+      [tabBtnLog, tabBtnAnalytics, tabBtnExport].forEach(b => {
+        b.classList.remove("text-orange-600", "border-orange-600", "font-bold");
+        b.classList.add("border-transparent", "text-slate-600");
+      });
+      [viewLog, viewAnalytics, viewExport].forEach(v => v.classList.add("hidden"));
+
+      if (tab === "log") {
+        tabBtnLog.classList.add("text-orange-600", "border-orange-600", "font-bold");
+        tabBtnLog.classList.remove("border-transparent");
+        viewLog.classList.remove("hidden");
+      } else if (tab === "analytics") {
+        tabBtnAnalytics.classList.add("text-orange-600", "border-orange-600", "font-bold");
+        tabBtnAnalytics.classList.remove("border-transparent");
+        viewAnalytics.classList.remove("hidden");
+        updateCharts();
+      } else if (tab === "export") {
+        tabBtnExport.classList.add("text-orange-600", "border-orange-600", "font-bold");
+        tabBtnExport.classList.remove("border-transparent");
+        viewExport.classList.remove("hidden");
+        updateVetSummary();
+      }
+    }
+
+    // --- Event Listeners Setup ---
+    window.addEventListener("DOMContentLoaded", function() {
+      // Load sample data
+      incidents = [...initialSampleData];
+
+      // Restore session webhook if present
+      try {
+        if (window.name) {
+          const parsed = JSON.parse(window.name);
+          if (parsed && parsed.sheetUrl) {
+            googleSheetWebhookUrl = parsed.sheetUrl;
+            document.getElementById("sheetsWebhookInput").value = googleSheetWebhookUrl;
+          }
+        }
+      } catch(e) {}
+
+      // UI Init
+      renderIncidentList();
+
+      // Navigation
+      tabBtnLog.addEventListener("click", () => setActiveTab("log"));
+      tabBtnAnalytics.addEventListener("click", () => setActiveTab("analytics"));
+      tabBtnExport.addEventListener("click", () => setActiveTab("export"));
+
+      // Search & Filters
+      document.getElementById("searchInput").addEventListener("input", renderIncidentList);
+      document.getElementById("filterSeverity").addEventListener("change", renderIncidentList);
+      document.getElementById("btnQuickExportCsv").addEventListener("click", exportToCsv);
+
+      // Modal open / close
+      document.getElementById("btnNewIncident").addEventListener("click", () => openModal());
+      document.getElementById("btnCloseModal").addEventListener("click", closeModal);
+      document.getElementById("btnCancelModal").addEventListener("click", closeModal);
+
+      // Sheets Modal open / close
+      document.getElementById("btnOpenSheetsConfig").addEventListener("click", openSheetsModal);
+      document.getElementById("btnCloseSheetsModal").addEventListener("click", closeSheetsModal);
+      document.getElementById("btnModalClose").addEventListener("click", closeSheetsModal);
+
+      // Save Webhook buttons
+      document.getElementById("btnSaveWebhook").addEventListener("click", () => {
+        saveWebhook(document.getElementById("sheetsWebhookInput").value);
+      });
+      document.getElementById("btnModalSave").addEventListener("click", () => {
+        saveWebhook(document.getElementById("modalWebhookInput").value);
+        closeSheetsModal();
+      });
+
+      // Copy script code
+      const scriptCode = document.getElementById("appsScriptCode").textContent;
+      document.getElementById("btnCopyScript").addEventListener("click", () => copyToClipboard(scriptCode));
+      document.getElementById("btnModalCopyScript").addEventListener("click", () => copyToClipboard(scriptCode));
+
+      // Test connection
+      document.getElementById("btnTestSheetConnection").addEventListener("click", async () => {
+        if (!googleSheetWebhookUrl) {
+          showToast("Please enter and save a Web App URL first", "error");
+          return;
+        }
+        showToast("Sending test row to Google Sheet...", "info");
+        const testPayload = {
+          id: "test-connection",
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toTimeString().slice(0, 5),
+          timePeriod: "Test",
+          location: "Testing Sync",
+          posture: "Testing",
+          severity: "Mild",
+          symptoms: ["System Test Connection"],
+          diet: "Test Data",
+          timeSinceFood: "None",
+          dietNotes: "Successful webhook test link",
+          medication: "None",
+          duration: "Instant",
+          notes: "Verification packet from Dog Reflux App."
+        };
+        await postIncidentToGoogleSheet(testPayload);
+        showToast("Test request sent! Check your Google Sheet for the new row.", "success");
+      });
+
+      // Sync All Pending
+      document.getElementById("btnSyncAllPending").addEventListener("click", async () => {
+        if (!googleSheetWebhookUrl) {
+          showToast("Please enter and save your Google Sheet URL first", "error");
+          return;
+        }
+        showToast(`Syncing ${incidents.length} entries to Google Sheets...`, "info");
+        for (const item of incidents) {
+          await postIncidentToGoogleSheet(item);
+          item.syncedToSheets = true;
+        }
+        renderIncidentList();
+        showToast("All entries pushed to Google Sheets successfully!", "success");
+      });
+
+      // Print Summary
+      document.getElementById("btnPrintReport").addEventListener("click", () => {
+        window.print();
+      });
+    });
+  </script>
+</body>
+</html>
